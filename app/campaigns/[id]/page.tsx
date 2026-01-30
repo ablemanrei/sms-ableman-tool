@@ -25,6 +25,7 @@ import {
   Eye,
   Settings,
   BarChart3,
+  ChevronRight,
 } from 'lucide-react';
 import { authUtils } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
@@ -52,6 +53,8 @@ export default function CampaignDetailsPage() {
   const [previewPage, setPreviewPage] = useState(1);
   const [previewSearch, setPreviewSearch] = useState('');
   const previewPerPage = 20;
+  const [previewLogs, setPreviewLogs] = useState<string[]>([]);
+  const [showPreviewLogs, setShowPreviewLogs] = useState(true);
 
   // Content switcher state for execution logs
   const [activeTab, setActiveTab] = useState<'overview' | 'messages'>('overview');
@@ -221,6 +224,8 @@ export default function CampaignDetailsPage() {
     try {
       setIsLoadingPreview(true);
       setShowPreview(true);
+      setPreviewLogs([]);
+      setShowPreviewLogs(true);
 
       const response = await fetch(
         `/api/campaigns/${campaignId}/preview`,
@@ -235,6 +240,7 @@ export default function CampaignDetailsPage() {
 
       setPreviewData(data.preview || []);
       setPreviewFiltersInfo(data.filtersInfo || null);
+      setPreviewLogs(data.logs || []);
     } catch (error: any) {
       console.error('Error loading preview:', error);
       setToast({ message: `Failed to load preview: ${error.message}`, type: 'error' });
@@ -695,6 +701,41 @@ export default function CampaignDetailsPage() {
                 <div className="text-center py-12">
                   <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary-500 border-t-transparent mx-auto mb-3"></div>
                   <p className="text-sm text-neutral-600">Fetching from Monday.com...</p>
+                  <p className="text-xs text-neutral-500 mt-2">Processing filters and pagination...</p>
+                </div>
+              )}
+
+              {/* Logs Section */}
+              {previewLogs.length > 0 && (
+                <div className="mb-4 border border-neutral-200 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setShowPreviewLogs(!showPreviewLogs)}
+                    className="w-full bg-neutral-50 px-4 py-2 flex items-center justify-between text-xs font-medium text-neutral-700 hover:bg-neutral-100 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      Processing Logs ({previewLogs.length} entries)
+                    </span>
+                    <ChevronRight className={`w-4 h-4 transition-transform ${showPreviewLogs ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showPreviewLogs && (
+                    <div className="bg-neutral-900 text-neutral-100 p-3 max-h-60 overflow-y-auto font-mono text-[10px] leading-relaxed">
+                      {previewLogs.map((log, index) => (
+                        <div
+                          key={index}
+                          className={`${
+                            log.includes('✅') ? 'text-green-400' :
+                            log.includes('❌') ? 'text-red-400' :
+                            log.includes('🔍') ? 'text-yellow-400' :
+                            log.includes('🚀') || log.includes('🎉') ? 'text-blue-400' :
+                            'text-neutral-300'
+                          }`}
+                        >
+                          {log}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

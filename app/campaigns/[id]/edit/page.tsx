@@ -191,7 +191,8 @@ export default function EditCampaignPage() {
         return;
       }
 
-      const structureQuery = `
+      // First, fetch columns
+      const columnsQuery = `
         query {
           boards(ids: [${config.board_id}]) {
             columns {
@@ -199,64 +200,110 @@ export default function EditCampaignPage() {
               title
               type
             }
-            groups(ids: ["${config.group_id}"]) {
-              id
-              title
-              items_page(limit: 100) {
-                items {
-                  id
-                  name
-                  column_values {
-                    id
-                    text
-                    type
-                  }
-                }
-              }
-            }
           }
         }
       `;
 
-      console.log('Fetching Monday.com data with query:', structureQuery);
-
-      const response = await fetch('https://api.monday.com/v2', {
+      const columnsResponse = await fetch('https://api.monday.com/v2', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: config.monday_api_key,
         },
-        body: JSON.stringify({ query: structureQuery }),
+        body: JSON.stringify({ query: columnsQuery }),
       });
 
-      const result = await response.json();
-      console.log('Monday.com API response:', result);
-      console.log('Full result.data:', result.data);
-      console.log('Boards array:', result.data?.boards);
+      const columnsResult = await columnsResponse.json();
 
-      if (result.errors) {
-        console.error('Monday.com API errors:', result.errors);
-        throw new Error(result.errors[0].message);
+      if (columnsResult.errors) {
+        console.error('Monday.com API errors:', columnsResult.errors);
+        throw new Error(columnsResult.errors[0].message);
       }
 
-      if (!result.data || !result.data.boards || result.data.boards.length === 0) {
-        console.error('No boards found in response');
-        throw new Error('No boards found in Monday.com response. Please check board ID and API key permissions.');
+      const columns = columnsResult.data?.boards?.[0]?.columns || [];
+      console.log('Fetched columns:', columns);
+
+      // Now fetch all items with pagination
+      let allItems: any[] = [];
+      let hasNextPage = true;
+      let cursor: string | null = null;
+      let pageCount = 0;
+      const maxPages = 50;
+
+      console.log('Starting pagination for items...');
+
+      while (hasNextPage && pageCount < maxPages) {
+        pageCount++;
+
+        const itemsQuery = `
+          query {
+            boards(ids: [${config.board_id}]) {
+              groups(ids: ["${config.group_id}"]) {
+                items_page(limit: 100${cursor ? `, cursor: "${cursor}"` : ''}) {
+                  cursor
+                  items {
+                    id
+                    name
+                    column_values {
+                      id
+                      text
+                      type
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `;
+
+        console.log(`Fetching page ${pageCount}...`);
+
+        const itemsResponse = await fetch('https://api.monday.com/v2', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: config.monday_api_key,
+          },
+          body: JSON.stringify({ query: itemsQuery }),
+        });
+
+        const itemsResult = await itemsResponse.json();
+
+        if (itemsResult.errors) {
+          console.error('Monday.com API errors:', itemsResult.errors);
+          throw new Error(itemsResult.errors[0].message);
+        }
+
+        const itemsPage = itemsResult.data?.boards?.[0]?.groups?.[0]?.items_page;
+
+        if (!itemsPage || !itemsPage.items) {
+          console.log('No more items found, ending pagination');
+          break;
+        }
+
+        const items = itemsPage.items;
+        allItems = allItems.concat(items);
+
+        console.log(`Page ${pageCount}: Fetched ${items.length} items, total: ${allItems.length}`);
+
+        // Check if there's a next page
+        if (itemsPage.cursor && items.length === 100) {
+          cursor = itemsPage.cursor;
+          console.log(`Has more pages, cursor: ${cursor}`);
+        } else {
+          hasNextPage = false;
+          console.log('No more pages to fetch');
+        }
       }
 
-      const board = result.data.boards[0];
-      console.log('Board object:', board);
-      console.log('Board columns:', board?.columns);
-      console.log('Board groups:', board?.groups);
+      if (pageCount >= maxPages) {
+        console.warn(`Reached maximum page limit (${maxPages})`);
+      }
 
-      const columns = board?.columns || [];
-      const items = board?.groups?.[0]?.items_page?.items || [];
-
-      console.log('Extracted columns:', columns);
-      console.log('Extracted items:', items);
+      console.log(`Finished fetching items. Total: ${allItems.length} items from ${pageCount} pages`);
 
       setMondayColumns(columns);
-      setMondayItems(items);
+      setMondayItems(allItems);
     } catch (error: any) {
       console.error('Error fetching Monday.com data:', error);
     } finally {
@@ -324,24 +371,16 @@ export default function EditCampaignPage() {
     setIsCalculatingRecipients(true);
 
     try {
-      // Filter items based on basic filters
-      let filteredItems = mondayItems.filter((item) => {
-        // Check status column match
-        const statusColumn = item.column_values?.find(
-          (col: any) => col.id === formData.status_column
-        );
-        const statusMatch = statusColumn?.text === formData.status_value;
+      let items = mondayItems;
 
-        if (!statusMatch) return false;
+      // STEP 1: Apply batch selection filter first (if selected_items exists)
+      if (formData.selected_items && formData.selected_items.length > 0) {
+        items = items.filter((item) => formData.selected_items.includes(item.id));
+      }
 
-        // Check phone column exists and not empty
-        const phoneColumn = item.column_values?.find(
-          (col: any) => col.id === formData.phone_column
-        );
-        if (!phoneColumn || !phoneColumn.text) return false;
-
-        // Apply advanced filters
-        if (formData.multiple_filters.length > 0) {
+      // STEP 2: Apply advanced filters
+      if (formData.multiple_filters.length > 0) {
+        items = items.filter((item) => {
           return formData.multiple_filters.every((filter) => {
             const column = item.column_values?.find(
               (col: any) => col.id === filter.column_id
@@ -362,7 +401,24 @@ export default function EditCampaignPage() {
                 return true;
             }
           });
-        }
+        });
+      }
+
+      // STEP 3: Filter items based on basic filters (status + phone)
+      let filteredItems = items.filter((item) => {
+        // Check status column match
+        const statusColumn = item.column_values?.find(
+          (col: any) => col.id === formData.status_column
+        );
+        const statusMatch = statusColumn?.text === formData.status_value;
+
+        if (!statusMatch) return false;
+
+        // Check phone column exists and not empty
+        const phoneColumn = item.column_values?.find(
+          (col: any) => col.id === formData.phone_column
+        );
+        if (!phoneColumn || !phoneColumn.text) return false;
 
         return true;
       });

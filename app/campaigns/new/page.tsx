@@ -157,7 +157,8 @@ export default function NewCampaignPage() {
         return;
       }
 
-      const structureQuery = `
+      // First, fetch columns separately
+      const columnsQuery = `
         query {
           boards(ids: [${config.board_id}]) {
             columns {
@@ -165,64 +166,113 @@ export default function NewCampaignPage() {
               title
               type
             }
-            groups(ids: ["${config.group_id}"]) {
-              id
-              title
-              items_page(limit: 100) {
-                items {
-                  id
-                  name
-                  column_values {
-                    id
-                    text
-                    type
-                  }
-                }
-              }
-            }
           }
         }
       `;
 
-      console.log('Fetching Monday.com data with query:', structureQuery);
+      console.log('Fetching Monday.com columns...');
 
-      const response = await fetch('https://api.monday.com/v2', {
+      const columnsResponse = await fetch('https://api.monday.com/v2', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: config.monday_api_key,
         },
-        body: JSON.stringify({ query: structureQuery }),
+        body: JSON.stringify({ query: columnsQuery }),
       });
 
-      const result = await response.json();
-      console.log('Monday.com API response:', result);
-      console.log('Full result.data:', result.data);
-      console.log('Boards array:', result.data?.boards);
+      const columnsResult = await columnsResponse.json();
 
-      if (result.errors) {
-        console.error('Monday.com API errors:', result.errors);
-        throw new Error(result.errors[0].message);
+      if (columnsResult.errors) {
+        console.error('Monday.com API errors (columns):', columnsResult.errors);
+        throw new Error(columnsResult.errors[0].message);
       }
 
-      if (!result.data || !result.data.boards || result.data.boards.length === 0) {
-        console.error('No boards found in response');
+      if (!columnsResult.data || !columnsResult.data.boards || columnsResult.data.boards.length === 0) {
+        console.error('No boards found in columns response');
         throw new Error('No boards found in Monday.com response. Please check board ID and API key permissions.');
       }
 
-      const board = result.data.boards[0];
-      console.log('Board object:', board);
-      console.log('Board columns:', board?.columns);
-      console.log('Board groups:', board?.groups);
-
-      const columns = board?.columns || [];
-      const items = board?.groups?.[0]?.items_page?.items || [];
-
+      const columns = columnsResult.data.boards[0]?.columns || [];
       console.log('Extracted columns:', columns);
-      console.log('Extracted items:', items);
-
       setMondayColumns(columns);
-      setMondayItems(items);
+
+      // Now fetch all items with pagination
+      let allItems: any[] = [];
+      let hasNextPage = true;
+      let cursor: string | null = null;
+      let pageCount = 0;
+      const maxPages = 50; // Limit to 50 pages (5,000 items max)
+
+      console.log('Starting Monday.com pagination...');
+
+      while (hasNextPage && pageCount < maxPages) {
+        pageCount++;
+
+        const itemsQuery = `
+          query {
+            boards(ids: [${config.board_id}]) {
+              groups(ids: ["${config.group_id}"]) {
+                items_page(limit: 100${cursor ? `, cursor: "${cursor}"` : ''}) {
+                  cursor
+                  items {
+                    id
+                    name
+                    column_values {
+                      id
+                      text
+                      type
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `;
+
+        console.log(`Fetching page ${pageCount}...`);
+
+        const itemsResponse = await fetch('https://api.monday.com/v2', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: config.monday_api_key,
+          },
+          body: JSON.stringify({ query: itemsQuery }),
+        });
+
+        const itemsResult = await itemsResponse.json();
+
+        if (itemsResult.errors) {
+          console.error('Monday.com API errors (items):', itemsResult.errors);
+          throw new Error(itemsResult.errors[0].message);
+        }
+
+        const board = itemsResult.data?.boards?.[0];
+        const group = board?.groups?.[0];
+        const itemsPage = group?.items_page;
+
+        if (!itemsPage) {
+          console.log('No more items found');
+          break;
+        }
+
+        const items = itemsPage.items || [];
+        allItems = allItems.concat(items);
+
+        console.log(`Page ${pageCount}: Fetched ${items.length} items (Total: ${allItems.length})`);
+
+        // Check if there's a next page
+        if (itemsPage.cursor && items.length === 100) {
+          cursor = itemsPage.cursor;
+        } else {
+          hasNextPage = false;
+        }
+      }
+
+      console.log(`Pagination complete: ${allItems.length} total items from ${pageCount} page(s)`);
+
+      setMondayItems(allItems);
     } catch (error: any) {
       console.error('Error fetching Monday.com data:', error);
     } finally {
