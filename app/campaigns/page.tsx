@@ -215,7 +215,7 @@ export default function CampaignsPage() {
         message_template: campaign.message_template,
         selected_items: campaign.selected_items || [],
         multiple_filters: campaign.multiple_filters || [],
-        schedules: campaign.schedules || [],
+        schedules: [], // Schedules are stored in campaign_schedules table, not on campaign object
         schedule_type: campaign.schedule_type || 'once',
         schedule_day: '',
         schedule_time: '09:00',
