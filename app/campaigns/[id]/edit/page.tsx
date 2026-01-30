@@ -235,7 +235,7 @@ export default function EditCampaignPage() {
       while (hasNextPage && pageCount < maxPages) {
         pageCount++;
 
-        const itemsQuery = `
+        const itemsQuery: string = `
           query {
             boards(ids: [${config.board_id}]) {
               groups(ids: ["${config.group_id}"]) {
