@@ -119,17 +119,19 @@ export async function POST(
       );
     }
 
-    // Fetch items from Monday.com
+    // Fetch items from Monday.com - filtering by group_id
     const query = `query {
       boards(ids: ${config.board_id}) {
-        items_page(limit: 500) {
-          items {
-            id
-            name
-            column_values {
+        groups(ids: "${config.group_id}") {
+          items_page(limit: 500) {
+            items {
               id
-              text
-              value
+              name
+              column_values {
+                id
+                text
+                value
+              }
             }
           }
         }
@@ -154,7 +156,17 @@ export async function POST(
       );
     }
 
-    let items = mondayResponse.data.data.boards[0].items_page.items;
+    const board = mondayResponse.data.data.boards?.[0];
+    const group = board?.groups?.[0];
+
+    if (!group || !group.items_page || !group.items_page.items) {
+      return NextResponse.json(
+        { error: 'No items found in the specified group' },
+        { status: 404 }
+      );
+    }
+
+    let items = group.items_page.items;
 
     // Filter items based on selected_items if available
     if (campaign.selected_items && campaign.selected_items.length > 0) {

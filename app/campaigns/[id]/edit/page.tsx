@@ -79,6 +79,13 @@ export default function EditCampaignPage() {
     fetchCampaignData();
   }, [campaignId]);
 
+  // Fetch Monday data when both campaign and configurations are loaded
+  useEffect(() => {
+    if (campaign && campaign.config_id && configurations.length > 0 && mondayColumns.length === 0) {
+      fetchMondayData(campaign.config_id);
+    }
+  }, [campaign, configurations]);
+
   useEffect(() => {
     if (currentSection === 'review' && mondayItems.length > 0) {
       calculateRecipientCount();
@@ -130,13 +137,7 @@ export default function EditCampaignPage() {
         is_active: data.is_active || false,
       });
 
-      // Fetch Monday data if config exists
-      if (data.config_id) {
-        // Wait a bit for configurations to load
-        setTimeout(() => {
-          fetchMondayData(data.config_id);
-        }, 500);
-      }
+      // Monday data will be fetched by useEffect when configurations are loaded
     } catch (error: any) {
       console.error('Error fetching campaign:', error);
       alert('Failed to load campaign: ' + error.message);
