@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const response = await axios.get(
-      'https://ap.airosofts.com/api/external/balance',
+      'https://app.airophone.com/api/external/balance',
       {
         headers: {
           Authorization: `Bearer ${airophone_api_key}`,
