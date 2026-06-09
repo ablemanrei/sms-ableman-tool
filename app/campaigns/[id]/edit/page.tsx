@@ -204,13 +204,12 @@ export default function EditCampaignPage() {
         }
       `;
 
-      const columnsResponse = await fetch('https://api.monday.com/v2', {
+      const columnsResponse = await fetch('/api/monday', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: config.monday_api_key,
         },
-        body: JSON.stringify({ query: columnsQuery }),
+        body: JSON.stringify({ api_key: config.monday_api_key, query: columnsQuery }),
       });
 
       const columnsResult = await columnsResponse.json();
@@ -258,13 +257,12 @@ export default function EditCampaignPage() {
 
         console.log(`Fetching page ${pageCount}...`);
 
-        const itemsResponse = await fetch('https://api.monday.com/v2', {
+        const itemsResponse = await fetch('/api/monday', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: config.monday_api_key,
           },
-          body: JSON.stringify({ query: itemsQuery }),
+          body: JSON.stringify({ api_key: config.monday_api_key, query: itemsQuery }),
         });
 
         const itemsResult = await itemsResponse.json();

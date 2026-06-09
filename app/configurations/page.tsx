@@ -335,13 +335,12 @@ export default function ConfigurationsPage() {
         }
       `;
 
-      const response = await fetch('https://api.monday.com/v2', {
+      const response = await fetch('/api/monday', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: config.monday_api_key,
         },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ api_key: config.monday_api_key, query }),
       });
 
       const result = await response.json();

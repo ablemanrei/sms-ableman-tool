@@ -366,13 +366,12 @@ export default function CampaignsPage() {
 
       console.log('Fetching Monday.com data with query:', structureQuery);
 
-      const response = await fetch('https://api.monday.com/v2', {
+      const response = await fetch('/api/monday', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: config.monday_api_key,
         },
-        body: JSON.stringify({ query: structureQuery }),
+        body: JSON.stringify({ api_key: config.monday_api_key, query: structureQuery }),
       });
 
       const result = await response.json();
